@@ -1,0 +1,506 @@
+import { useState, useEffect, FormEvent } from 'react';
+import { Operative, SpeCOp } from './types';
+import { 
+  INITIAL_OPERATIVES, INITIAL_SPECIAL_OPS 
+} from './initialData';
+import Header from './components/Header';
+import DashboardStats from './components/DashboardStats';
+import MembersTable from './components/MembersTable';
+import OperationsBoard from './components/OperationsBoard';
+import ReportCalculator from './components/ReportCalculator';
+import OperativeDossier from './components/OperativeDossier';
+import AddMemberModal from './components/AddMemberModal';
+import AddOperationModal from './components/AddOperationModal';
+import { 
+  ShieldAlert, Shield, Copy, X, Check, Award, Scroll, Info
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+export default function App() {
+  const [operatives, setOperatives] = useState<Operative[]>([]);
+  const [operations, setOperations] = useState<SpeCOp[]>([]);
+  const [activeTab, setActiveTab] = useState<string>('members');
+  const [serverName, setServerName] = useState<string>('Amazing RP TITAN');
+  const [commanderName, setCommanderName] = useState<string>('Alexander_Gromov');
+
+  // Modal / Drawer states
+  const [selectedOperative, setSelectedOperative] = useState<Operative | null>(null);
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [isAddingOperation, setIsAddingOperation] = useState(false);
+  const [editingOperative, setEditingOperative] = useState<Operative | null>(null);
+  const [forumExportText, setForumExportText] = useState<string | null>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportCopied, setExportCopied] = useState(false);
+
+  // Load from LocalStorage or seed defaults
+  useEffect(() => {
+    const savedOps = localStorage.getItem('berserk_operatives_v1');
+    const savedSpecOps = localStorage.getItem('berserk_specops_v1');
+    const savedServer = localStorage.getItem('berserk_server_v1');
+    const savedCommander = localStorage.getItem('berserk_commander_v1');
+
+    if (savedOps) {
+      setOperatives(JSON.parse(savedOps));
+    } else {
+      setOperatives(INITIAL_OPERATIVES);
+      localStorage.setItem('berserk_operatives_v1', JSON.stringify(INITIAL_OPERATIVES));
+    }
+
+    if (savedSpecOps) {
+      setOperations(JSON.parse(savedSpecOps));
+    } else {
+      setOperations(INITIAL_SPECIAL_OPS);
+      localStorage.setItem('berserk_specops_v1', JSON.stringify(INITIAL_SPECIAL_OPS));
+    }
+
+    if (savedServer) setServerName(savedServer);
+    if (savedCommander) setCommanderName(savedCommander);
+  }, []);
+
+  // Sync to local storage on adjustments
+  const syncOperatives = (newOps: Operative[]) => {
+    setOperatives(newOps);
+    localStorage.setItem('berserk_operatives_v1', JSON.stringify(newOps));
+  };
+
+  const syncOperations = (newOps: SpeCOp[]) => {
+    setOperations(newOps);
+    localStorage.setItem('berserk_specops_v1', JSON.stringify(newOps));
+  };
+
+  const handleUpdateServerName = (name: string) => {
+    setServerName(name);
+    localStorage.setItem('berserk_server_v1', name);
+  };
+
+  const handleUpdateCommanderName = (name: string) => {
+    setCommanderName(name);
+    localStorage.setItem('berserk_commander_v1', name);
+  };
+
+  // Reset to static defaults
+  const handleClearData = () => {
+    setOperatives(INITIAL_OPERATIVES);
+    setOperations(INITIAL_SPECIAL_OPS);
+    setServerName('Amazing RP TITAN');
+    setCommanderName('Alexander_Gromov');
+    localStorage.removeItem('berserk_operatives_v1');
+    localStorage.removeItem('berserk_specops_v1');
+    localStorage.removeItem('berserk_server_v1');
+    localStorage.removeItem('berserk_commander_v1');
+    setSelectedOperative(null);
+  };
+
+  // Add operative callback
+  const handleAddOperative = (newOpData: Omit<Operative, 'id' | 'joinDate' | 'achievements' | 'notes'>) => {
+    const freshOp: Operative = {
+      ...newOpData,
+      id: `op-${Date.now()}`,
+      joinDate: new Date().toISOString().split('T')[0],
+      achievements: [],
+      notes: 'Недавно зачислен в подразделение. Характеристика формируется.'
+    };
+    const updated = [freshOp, ...operatives];
+    syncOperatives(updated);
+    setIsAddingMember(false);
+  };
+
+  // Edit / Update operative detail
+  const handleUpdateOperative = (updatedOp: Operative) => {
+    const updatedList = operatives.map(op => op.id === updatedOp.id ? updatedOp : op);
+    syncOperatives(updatedList);
+    // Sync with currently open view if relevant
+    if (selectedOperative && selectedOperative.id === updatedOp.id) {
+      setSelectedOperative(updatedOp);
+    }
+  };
+
+  // Delete / Dismiss operative
+  const handleDeleteOperative = (id: string) => {
+    if (confirm('Вы уверены, что хотите уволить данного сотрудника из рядов ОСН «Берсерк»?')) {
+      const updatedList = operatives.filter(op => op.id !== id);
+      syncOperatives(updatedList);
+      if (selectedOperative?.id === id) {
+        setSelectedOperative(null);
+      }
+    }
+  };
+
+  // Add operation callback
+  const handleAddOperation = (newOp: Omit<SpeCOp, 'id'>) => {
+    const freshSpecOp: SpeCOp = {
+      ...newOp,
+      id: `spec-${Date.now()}`
+    };
+    const updated = [freshSpecOp, ...operations];
+    syncOperations(updated);
+    setIsAddingOperation(false);
+  };
+
+  // Delete operation item
+  const handleDeleteOperation = (id: string) => {
+    if (confirm('Вы уверены, что хотите удалить эту тактическую запись из архива?')) {
+      const updatedList = operations.filter(o => o.id !== id);
+      syncOperations(updatedList);
+    }
+  };
+
+  // Apply points from calculator
+  const handleApplyPoints = (opId: string, pts: number, details: string) => {
+    const updatedList = operatives.map(op => {
+      if (op.id === opId) {
+        // Increment points, and log in notes
+        const currentNotes = op.notes || '';
+        const todayStr = new Date().toLocaleDateString('ru-RU');
+        const updatedNotes = `${currentNotes}\n[${todayStr}] Начислено ${pts} баллов за работу: ${details}.`;
+        
+        return {
+          ...op,
+          points: op.points + pts,
+          notes: updatedNotes.trim()
+        };
+      }
+      return op;
+    });
+    syncOperatives(updatedList);
+  };
+
+  // Bulk reset points of entire squad (new weekly cycle)
+  const handleBulkResetPoints = () => {
+    if (confirm('Вы действительно хотите обнулить баллы ВСЕМУ личному составу спецотряда? Это действие запускает новый отчетный раунд (новую неделю).')) {
+      const resetList = operatives.map(op => ({
+        ...op,
+        points: 0
+      }));
+      syncOperatives(resetList);
+    }
+  };
+
+  // Generate complete roster export BB-Code
+  const handleExportRosterBBCode = () => {
+    const dateStr = new Date().toLocaleDateString('ru-RU');
+    const totalCount = operatives.length;
+    
+    let codeStr = `[CENTER][B][SIZE=6][FONT=Trebuchet MS][COLOR=#EF4444]ЛИЧНЫЙ СОСТАВ ОСН «БЕРСЕРК»[/COLOR][/FONT][/SIZE][/B]\n`;
+    codeStr += `[FONT=Trebuchet MS]Amazing Online • Сервер: [COLOR=#F59E0B]${serverName}[/COLOR] • Дата выгрузки: [COLOR=#8B5CF6]${dateStr}[/COLOR]\n`;
+    codeStr += `Преставитель командования: [COLOR=#FF0000][B]${commanderName}[/B][/COLOR]\n`;
+    codeStr += `Всего зачислено в отряде: [COLOR=#10B981][B]${totalCount}[/B][/COLOR] оперативников[/FONT][/CENTER]\n\n`;
+    
+    codeStr += `[FONT=Trebuchet MS][SIZE=4][B]Полная служебная ведомость сотрудников:[/B][/SIZE]\n`;
+    codeStr += `[CODE]\n`;
+    
+    operatives.forEach((op, index) => {
+      codeStr += `${index + 1}. [${op.rank}] ${op.nickname} | Позывной: «${op.callsign}» | Роль: ${op.position}\n`;
+      codeStr += `   -> Сила: ${op.specialization} | Статус дежурства: ${op.status}\n`;
+      codeStr += `   -> Активность за неделю: ${op.points} баллов | Взыскания: Выговоры [${op.reprimands}/3] Предупреждения [${op.warnings}/2]\n`;
+      if (op.achievements.length > 0) {
+        codeStr += `   -> Награды: ${op.achievements.join(', ')}\n`;
+      }
+      codeStr += `--------------------------------------------------\n`;
+    });
+
+    codeStr += `[/CODE]\n\n`;
+    codeStr += `[CENTER][I]Архив ведомости ОСН «Берсерк» сгенерирован автоматически терминалом TITAN-COM.[/I][/CENTER][/FONT]`;
+
+    setForumExportText(codeStr);
+    setShowExportModal(true);
+  };
+
+  const handleCopyExportText = () => {
+    if (forumExportText) {
+      navigator.clipboard.writeText(forumExportText);
+      setExportCopied(true);
+      setTimeout(() => setExportCopied(false), 2000);
+    }
+  };
+
+  // Inline quick update for rank or position or avatarColor inside custom edit Modal
+  const handleSaveQuickEdit = (e: FormEvent) => {
+    e.preventDefault();
+    if (editingOperative) {
+      handleUpdateOperative(editingOperative);
+      setEditingOperative(null);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-red-900/40 relative pb-16">
+      
+      {/* Background Grid Pattern Accent */}
+      <div className="absolute inset-0 bg-[radial-gradient(#1e1e35_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none opacity-30" />
+      
+      {/* Immersive Header element */}
+      <Header 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab}
+        serverName={serverName}
+        setServerName={handleUpdateServerName}
+        commanderName={commanderName}
+        setCommanderName={handleUpdateCommanderName}
+        onClearData={handleClearData}
+      />
+
+      {/* Main Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 relative z-10">
+        
+        {/* Statistics Dashboard Banner */}
+        <DashboardStats operatives={operatives} operations={operations} />
+
+        {/* Tab views switcher with smooth Motion page animate */}
+        <AnimatePresence mode="wait">
+          {activeTab === 'members' && (
+            <motion.div
+              key="members-tab"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-6"
+            >
+              <MembersTable
+                operatives={operatives}
+                onSelectOperative={setSelectedOperative}
+                onEditOperative={setEditingOperative}
+                onDeleteOperative={handleDeleteOperative}
+                onAddOperativeClick={() => setIsAddingMember(true)}
+                onBulkResetPoints={handleBulkResetPoints}
+                onExportBBCode={handleExportRosterBBCode}
+              />
+            </motion.div>
+          )}
+
+          {activeTab === 'operations' && (
+            <motion.div
+              key="operations-tab"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.25 }}
+            >
+              <OperationsBoard 
+                operations={operations}
+                onAddOperationClick={() => setIsAddingOperation(true)}
+                onDeleteOperation={handleDeleteOperation}
+              />
+            </motion.div>
+          )}
+
+          {activeTab === 'calculator' && (
+            <motion.div
+              key="calculator-tab"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.25 }}
+            >
+              <ReportCalculator 
+                operatives={operatives}
+                onApplyPoints={handleApplyPoints}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+      </main>
+
+      {/* FOOTER */}
+      <footer className="mt-12 py-6 border-t border-slate-900 bg-slate-950/80 text-center text-[10px] font-mono text-slate-500 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-3">
+        <div>
+          <span>СДЕЛАНО ДЛЯ ИГРОКОВ AMAZING ONLINE • СЕРВЕР TITAN • ОСН «БЕРСЕРК» © 2026</span>
+        </div>
+        <div className="flex gap-4">
+          <span className="text-red-500/80 font-bold">СПЕЦНАЗ БЫСТРОГО РЕАГИРОВАНИЯ</span>
+          <span className="text-slate-600">АРХИВЫ ШТАБА • В СЕТИ</span>
+        </div>
+      </footer>
+
+      {/* MODALS & DRAWERS RENDER */}
+
+      {/* 1. Operative Dossier Slide-Over Detail Drawer */}
+      <AnimatePresence>
+        {selectedOperative && (
+          <OperativeDossier
+            operative={selectedOperative}
+            onClose={() => setSelectedOperative(null)}
+            onUpdateOperative={handleUpdateOperative}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 2. Add Member Modal popup */}
+      <AnimatePresence>
+        {isAddingMember && (
+          <AddMemberModal
+            onClose={() => setIsAddingMember(false)}
+            onAddOperative={handleAddOperative}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 3. Add Operation Modal popup */}
+      <AnimatePresence>
+        {isAddingOperation && (
+          <AddOperationModal
+            onClose={() => setIsAddingOperation(false)}
+            onAddOperation={handleAddOperation}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 4. Full Group BB-Code Export Modal popup */}
+      <AnimatePresence>
+        {showExportModal && forumExportText && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="w-full max-w-2xl bg-slate-950 border border-slate-900 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[520px]"
+            >
+              <div className="p-5 border-b border-slate-950 bg-slate-950/40 flex justify-between items-center">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <Scroll className="w-4 h-4 text-amber-500" />
+                  Готовый форумный BB-код состава
+                </h3>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 flex-1 overflow-y-auto space-y-4">
+                <div className="p-3 bg-slate-900/20 border border-slate-900 flex items-center gap-2.5 text-xs text-slate-400 rounded-lg">
+                  <Info className="w-4 h-4 text-blue-400" />
+                  <span>Скопируйте код из текстового поля ниже и вставьте его напрямую в редактор на форуме Amazing Online в режиме BB-кодов или обычного текста.</span>
+                </div>
+
+                <div className="w-full bg-slate-950 border border-slate-900 text-slate-300 rounded-lg p-4 font-mono text-[10px] whitespace-pre h-[280px] overflow-auto select-all leading-normal">
+                  {forumExportText}
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-slate-900 bg-slate-950 flex gap-3">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="flex-1 py-2 px-4 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold rounded-lg border border-slate-800 transition"
+                >
+                  Закрыть окно
+                </button>
+                <button
+                  onClick={handleCopyExportText}
+                  className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-2"
+                >
+                  {exportCopied ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Скопировано!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Скопировать BB-Code</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 5. Custom Quick Edit Operative Modal */}
+      <AnimatePresence>
+        {editingOperative && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="w-full max-w-md bg-slate-950 border border-slate-900 rounded-xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-5 border-b border-slate-950 bg-slate-950/40 flex justify-between items-center">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                  Быстрое изменение профиля боевого офицера
+                </h3>
+                <button
+                  onClick={() => setEditingOperative(null)}
+                  className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-850"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveQuickEdit} className="p-6 space-y-4">
+                
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1">
+                    Никнейм сотрудника (Позывной)
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-850 rounded-lg text-xs text-slate-500 font-mono focus:outline-none cursor-not-allowed"
+                    value={`${editingOperative.nickname} («${editingOperative.callsign}»)`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+                      Накопленные баллы
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white font-mono focus:outline-none focus:border-red-500/50"
+                      value={editingOperative.points}
+                      onChange={(e) => setEditingOperative({
+                        ...editingOperative,
+                        points: Number(e.target.value)
+                      })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+                      Доверенная Роль
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white font-mono focus:outline-none focus:border-red-500/50"
+                      value={editingOperative.position}
+                      onChange={(e) => setEditingOperative({
+                        ...editingOperative,
+                        position: e.target.value
+                      })}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-5 border-t border-slate-900 bg-slate-950 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingOperative(null)}
+                    className="flex-1 py-2 px-4 bg-slate-900 text-slate-400 hover:text-white rounded-lg text-xs font-semibold border border-slate-800 transition"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 px-4 bg-red-650 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-md shadow-red-950/20"
+                  >
+                    Сохранить изменения
+                  </button>
+                </div>
+
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+    </div>
+  );
+}

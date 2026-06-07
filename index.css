@@ -1,0 +1,252 @@
+import { useState, FormEvent } from 'react';
+import { Operative } from '../types';
+import { 
+  AVAILABLE_RANKS, AVAILABLE_POSITIONS, AVAILABLE_SPECIALIZATIONS 
+} from '../initialData';
+import { X, UserPlus, Info } from 'lucide-react';
+import { motion } from 'motion/react';
+
+interface AddMemberModalProps {
+  onClose: () => void;
+  onAddOperative: (operative: Omit<Operative, 'id' | 'joinDate' | 'achievements' | 'notes'>) => void;
+}
+
+const AVATAR_COLORS = [
+  '#EF4444', // Red
+  '#F59E0B', // Amber
+  '#10B981', // Emerald
+  '#3B82F6', // Blue
+  '#8B5CF6', // Purple
+  '#EC4899', // Pink
+  '#06B6D4', // Cyan
+  '#14B8A6'  // Teal
+];
+
+export default function AddMemberModal({ onClose, onAddOperative }: AddMemberModalProps) {
+  const [nickname, setNickname] = useState('');
+  const [callsign, setCallsign] = useState('');
+  const [rank, setRank] = useState('Прапорщик');
+  const [position, setPosition] = useState('Боец ОСН');
+  const [specialization, setSpecialization] = useState<Operative['specialization']>('Штурмовик');
+  const [status, setStatus] = useState<Operative['status']>('В строю');
+  const [points, setPoints] = useState(0);
+  const [avatarColor, setAvatarColor] = useState('#EF4444');
+  const [validationError, setValidationError] = useState('');
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setValidationError('');
+
+    const trimmedNick = nickname.trim();
+    const trimmedCall = callsign.trim();
+
+    if (!trimmedNick) {
+      setValidationError('Укажите никнейм оперативника.');
+      return;
+    }
+
+    if (!trimmedNick.includes('_')) {
+      setValidationError('Никнейм должен быть в формате Имя_Фамилия (например, Ivan_Morozov).');
+      return;
+    }
+
+    if (!trimmedCall) {
+      setValidationError('Внесите тактический позывной бойца.');
+      return;
+    }
+
+    onAddOperative({
+      nickname: trimmedNick,
+      callsign: trimmedCall,
+      rank,
+      position,
+      specialization,
+      status,
+      points,
+      reprimands: 0,
+      warnings: 0,
+      avatarColor
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0 }}
+        className="w-full max-w-lg bg-slate-950 border border-slate-900 rounded-xl overflow-hidden shadow-2xl"
+      >
+        {/* Modal Header */}
+        <div className="p-5 border-b border-slate-950 flex justify-between items-center bg-slate-950/40">
+          <h3 className="text-sm font-bold text-white tracking-wide uppercase font-sans flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-red-500" />
+            Вербовка в ОСН «Берсерк»
+          </h3>
+          <button 
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Modal Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          
+          {validationError && (
+            <div className="p-3 bg-red-950/40 border border-red-900/30 text-red-400 rounded-lg text-xs font-mono flex items-center gap-2">
+              <Info className="w-4 h-4" />
+              <span>{validationError}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            
+            {/* Nickname */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+                Игровой Никнейм <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Dmitry_Sokolov"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500/50 transition font-mono"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+              />
+            </div>
+
+            {/* Callsign */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+                Оперативный Позывной <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Кречет"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500/50 transition font-sans"
+                value={callsign}
+                onChange={(e) => setCallsign(e.target.value)}
+              />
+            </div>
+
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+
+            {/* Rank */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+                Воинское звание
+              </label>
+              <select
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500/50 transition font-mono"
+                value={rank}
+                onChange={(e) => setRank(e.target.value)}
+              >
+                {AVAILABLE_RANKS.map(rk => (
+                  <option key={rk} value={rk}>{rk}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Position */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+                Должность в ОСН
+              </label>
+              <select
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500/50 transition font-mono"
+                value={position}
+                onChange={(e) => setPosition(e.target.value)}
+              >
+                {AVAILABLE_POSITIONS.map(pos => (
+                  <option key={pos} value={pos}>{pos}</option>
+                ))}
+              </select>
+            </div>
+
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+
+            {/* Specialization */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+                Специализация
+              </label>
+              <select
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500/50 transition font-sans"
+                value={specialization}
+                onChange={(e) => setSpecialization(e.target.value as Operative['specialization'])}
+              >
+                {AVAILABLE_SPECIALIZATIONS.map(spec => (
+                  <option key={spec} value={spec}>{spec}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Initial Points */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+                Начальные баллы активности
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="300"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-500/50 transition font-mono"
+                value={points}
+                onChange={(e) => setPoints(Number(e.target.value))}
+              />
+            </div>
+
+          </div>
+
+          {/* Color Selector */}
+          <div>
+            <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-wide mb-1.5">
+              Цвет тактического аватара
+            </label>
+            <div className="flex gap-2.5">
+              {AVATAR_COLORS.map(color => (
+                <button
+                  type="button"
+                  key={color}
+                  onClick={() => setAvatarColor(color)}
+                  className={`w-6 h-6 rounded-full border-2 transition transform hover:scale-110 active:scale-95 ${
+                    avatarColor === color ? 'border-white' : 'border-transparent'
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="pt-5 border-t border-slate-900 mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 px-4 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg text-xs font-semibold border border-slate-800 transition"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-md shadow-red-950/40"
+            >
+              Зачислить в личный состав
+            </button>
+          </div>
+
+        </form>
+
+      </motion.div>
+    </div>
+  );
+}
